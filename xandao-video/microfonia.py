@@ -118,34 +118,34 @@ def scene_image(i,title,tag,kind):
     return target
 
 def main():
-    api_key=os.environ.get("ELEVENLABS_API_KEY","")
-    if not api_key:
-        raise RuntimeError("Falta segredo ELEVENLABS_API_KEY.")
-    parts=[]
-    total=0
-    for i,(title,spoken,tag,kind) in enumerate(SCENES,1):
-        speech=synthesize(i,spoken,api_key)
-        image=scene_image(i,title,tag,kind)
-        seconds=duration(speech)+0.4
-        frames=math.ceil(seconds*FPS)
-        video=OUT/f"trecho-{i:02}.mp4"
-        run("ffmpeg","-hide_banner","-loglevel","error","-y",
-            "-loop","1","-framerate",str(FPS),"-i",str(image),"-i",str(speech),
-            "-filter_complex",
-            "[0:v]scale=756:1344,crop=720:1280:x='18+12*sin(n/35)':y='32+12*cos(n/42)',"
-            "format=yuv420p[v];[1:a]apad=pad_dur=0.4,aresample=async=1[a]",
-            "-map","[v]","-map","[a]","-t",str(seconds),
-            "-r",str(FPS),"-c:v","libx264","-preset","veryfast","-crf","23",
-            "-c:a","aac","-b:a","160k","-ar","44100","-movflags","+faststart",video)
-        parts.append(video)
-        total+=seconds
-    manifest=OUT/"lista.txt"
-    manifest.write_text("".join("file '"+p.name+"'\n" for p in parts),encoding="utf-8")
-    final=OUT/"Xandao-Microfonia-ElevenLabs.mp4"
-    run("ffmpeg","-hide_banner","-loglevel","error","-y",
-        "-f","concat","-safe","0","-i",str(manifest),
-        "-c","copy","-movflags","+faststart",str(final))
-    print(f"VÍDEO GERADO: {final} | {duration(final):.1f} segundos")
+    source = Path("xandao-video/voice/xandao-locucao-elevenlabs.mp3")
+    if not source.is_file():
+        raise RuntimeError("O MP3 original aprovado nao foi encontrado.")
+    total = duration(source)
+    if total <= 1:
+        raise RuntimeError("O MP3 original possui duracao invalida.")
+    # Um roteiro visual com seis cartelas distribuídas pela locução original.
+    for i, (title, spoken, tag, kind) in enumerate(SCENES, 1):
+        scene_image(i, title, tag, kind)
+    part = total / len(SCENES)
+    manifest = OUT / "cenas.txt"
+    lines = []
+    for i in range(1, len(SCENES) + 1):
+        lines.append(f"file 'cena-{i:02}.png'")
+        lines.append(f"duration {part:.6f}")
+    lines.append(f"file 'cena-{len(SCENES):02}.png'")
+    manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    final = OUT / "Xandao-Microfonia-ElevenLabs.mp4"
+    run("ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "concat", "-safe", "0", "-i", str(manifest),
+        "-i", str(source),
+        "-vf", "scale=720:1280,format=yuv420p",
+        "-t", str(total), "-r", str(FPS),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "160k",
+        "-movflags", "+faststart", str(final))
+    print(f"VIDEO GERADO: {final} | {duration(final):.1f} segundos")
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()
